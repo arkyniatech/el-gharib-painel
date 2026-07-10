@@ -19,7 +19,7 @@
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   body { margin:0; background:var(--bg); color:var(--text);
     font-family:-apple-system,'Segoe UI',Roboto,sans-serif;
-    padding:14px 14px calc(30px + env(safe-area-inset-bottom)); }
+    padding:14px 14px calc(86px + env(safe-area-inset-bottom)); }
   .top { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
   .top img { width:52px; height:52px; border-radius:50%; }
   .top h1 { font-family:Georgia,serif; color:var(--gold); font-size:20px; margin:0; }
@@ -53,16 +53,63 @@
   .tag { font-size:12px; border-radius:99px; padding:4px 12px; background:#3a2c1a; color:var(--warn); }
   .center { text-align:center; padding:50px 20px; color:var(--muted); }
   .center .big { font-size:50px; }
+  .search input { width:100%; background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:12px 14px; color:var(--text); font-size:16px; outline:none; margin-bottom:10px; }
+  .prow { display:flex; align-items:center; gap:10px; background:var(--panel); border:1px solid var(--border);
+    border-radius:12px; padding:11px 12px; margin-bottom:8px; }
+  .prow .nm { flex:1; min-width:0; font-size:14px; font-weight:600; }
+  .prow .sub { font-size:11px; color:var(--muted); font-weight:400; margin-top:2px; }
+  .prow.inactive { opacity:.45; }
+  .stepper { display:flex; align-items:center; gap:8px; }
+  .stepper button { width:36px; height:36px; border-radius:10px; border:1px solid var(--border);
+    background:var(--panel2); color:var(--gold-l); font-size:19px; line-height:1; }
+  .stepper button.add { background:linear-gradient(180deg,var(--gold-l),var(--gold)); color:#21301c; border:none; font-weight:800; }
+  .stepper span { min-width:16px; text-align:center; font-weight:700; }
+  .tabbar { position:fixed; left:0; right:0; bottom:0; display:flex; z-index:30;
+    background:#0c1a12; border-top:1px solid var(--border);
+    padding:6px 8px calc(6px + env(safe-area-inset-bottom)); }
+  .tab { flex:1; background:none; border:none; color:var(--muted); font-size:11px;
+    padding:6px 0; border-radius:10px; }
+  .tab .ic { font-size:20px; display:block; margin-bottom:2px; }
+  .tab.on { color:var(--gold-l); background:var(--panel2); }
+  .sheet-bg { position:fixed; inset:0; background:rgba(0,0,0,.65); display:flex; align-items:flex-end; z-index:40; }
+  .sheet { background:var(--panel); border-radius:18px 18px 0 0; border-top:1px solid var(--gold);
+    width:100%; max-height:88vh; overflow-y:auto; padding:18px 16px calc(18px + env(safe-area-inset-bottom)); }
+  .sheet h2 { font-family:Georgia,serif; color:var(--gold); margin:0 0 12px; font-size:19px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
+  input.f, select.f { width:100%; background:#0d1b13; border:1px solid var(--border); border-radius:10px;
+    padding:12px; color:var(--text); font-size:16px; outline:none; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .btn { width:100%; border:none; border-radius:12px; padding:15px; font-size:16px; font-weight:800;
+    background:linear-gradient(180deg,var(--gold-l),var(--gold)); color:#21301c; margin-top:14px; }
+  .btn.ghost { background:none; border:1px solid var(--border); color:var(--muted); font-weight:400; }
+  .btn:disabled { opacity:.5; }
+  .paybtns { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:6px; }
+  .paybtns button { border:1px solid var(--border); background:var(--panel2); color:var(--text);
+    border-radius:10px; padding:12px; font-size:14px; }
+  .paybtns button.on { border-color:var(--gold); color:var(--gold-l); font-weight:700; }
+  .toast { position:fixed; top:calc(12px + env(safe-area-inset-top)); left:12px; right:12px; z-index:60;
+    background:var(--panel2); border:1px solid var(--gold); border-radius:12px; padding:13px 16px;
+    font-size:14px; box-shadow:0 8px 30px rgba(0,0,0,.5); }
+  .cartbar { position:fixed; left:12px; right:12px; bottom:calc(64px + env(safe-area-inset-bottom)); z-index:30;
+    background:linear-gradient(180deg,var(--gold-l),var(--gold)); color:#21301c; border-radius:14px;
+    padding:15px; font-size:16px; font-weight:800; text-align:center; border:none; width:calc(100% - 24px);
+    box-shadow:0 8px 30px rgba(0,0,0,.5); }
 </style>
 </head>
 <body>
-<div id="app"><div class="center"><div class="big">💎</div>Carregando o painel…</div></div>
+<div id="app"><div class="center"><div class="big">💎</div>Carregando…</div></div>
+<nav class="tabbar" id="tabbar" style="display:none">
+  <button class="tab on" data-v="painel" onclick="go('painel')"><span class="ic">📊</span>Painel</button>
+  <button class="tab" data-v="produtos" onclick="go('produtos')"><span class="ic">📦</span>Produtos</button>
+  <button class="tab" data-v="venda" onclick="go('venda')"><span class="ic">🛒</span>Venda</button>
+</nav>
 
 <script>
 const SUPABASE_URL = 'https://znnimedzlfllqbhguguj.supabase.co'
 const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpubmltZWR6bGZsbHFiaGd1Z3VqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg2OTA1MjMsImV4cCI6MjA4NDI2NjUyM30.hKninXOBl1ln6LdPpO6SpWexlcXs3Qlp3wZO9E7bj-8'
+const H = { apikey: ANON_KEY, Authorization: 'Bearer ' + ANON_KEY, 'Content-Type': 'application/json' }
 
-// Token secreto: chega na URL (?t=...) uma vez e fica salvo no aparelho
 const params = new URLSearchParams(location.search)
 if (params.get('t')) {
   localStorage.setItem('token', params.get('t'))
@@ -70,11 +117,40 @@ if (params.get('t')) {
 }
 const TOKEN = localStorage.getItem('token')
 
+let snap = null, updatedAt = null, view = 'painel'
+let pTerm = '', vTerm = '', cart = {}, payMethod = 'PIX', editP = null
 const app = document.getElementById('app')
+
 const money = (c) => ((c || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))
 const hora = (ts) => (ts || '').includes(' ') ? ts.split(' ')[1].slice(0, 5) : new Date(ts).toLocaleTimeString('pt-BR').slice(0, 5)
 const diaLabel = (iso) => ['dom','seg','ter','qua','qui','sex','sáb'][new Date(iso + 'T12:00:00').getDay()]
+const maskMoney = (v) => {
+  const d = String(v).replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(0, 10)
+  return (parseInt(d || '0', 10) / 100).toFixed(2).replace('.', ',')
+}
+const cents = (v) => Math.round(parseFloat(String(v).replace(/\./g, '').replace(',', '.')) * 100) || 0
+
+function toast(msg, ms = 3500) {
+  document.querySelector('.toast')?.remove()
+  const el = document.createElement('div')
+  el.className = 'toast'
+  el.textContent = msg
+  document.body.appendChild(el)
+  setTimeout(() => el.remove(), ms)
+}
+
+async function rpc(fn, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, { method: 'POST', headers: H, body: JSON.stringify(body) })
+  if (!r.ok) throw new Error((await r.text()).slice(0, 120))
+  const text = await r.text()
+  return text ? JSON.parse(text) : null
+}
+
+// Comando pro PDV executar (aplica em até ~15s no caixa)
+async function sendCommand(type, payload) {
+  return rpc('gharib_command', { p_token: TOKEN, p_type: type, p_payload: payload })
+}
 
 async function load() {
   if (!TOKEN) {
@@ -82,111 +158,231 @@ async function load() {
     return
   }
   try {
-    const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/gharib_painel', {
-      method: 'POST',
-      headers: { apikey: ANON_KEY, Authorization: 'Bearer ' + ANON_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_token: TOKEN })
-    })
-    const data = await r.json()
+    const data = await rpc('gharib_painel', { p_token: TOKEN })
     if (!data || !data.snapshot) throw new Error('sem dados')
-    render(data.snapshot, data.updated_at)
+    snap = data.snapshot
+    updatedAt = data.updated_at
+    document.getElementById('tabbar').style.display = 'flex'
+    const busy = document.querySelector('.sheet-bg') ||
+      ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)
+    if (!busy) render()
   } catch (e) {
-    if (!document.querySelector('.top')) {
-      app.innerHTML = '<div class="center"><div class="big">📡</div>Sem conexão com o painel.<br>Puxe pra atualizar ou confira a internet.</div>'
-    }
+    if (!snap) app.innerHTML = '<div class="center"><div class="big">📡</div>Sem conexão com o painel.<br>Confira a internet.</div>'
   }
 }
 
-function render(s, updatedAt) {
-  const t = s.today
+window.go = (v) => {
+  view = v
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.dataset.v === v))
+  render()
+}
+
+function render() {
+  if (!snap) return
+  if (view === 'painel') renderPainel()
+  if (view === 'produtos') renderProdutos()
+  if (view === 'venda') renderVenda()
+}
+
+// ---------- PAINEL ----------
+function renderPainel() {
+  const s = snap, t = s.today
   const ticket = t.count > 0 ? Math.round(t.total / t.count) : 0
   const maxWeek = Math.max(...s.week.map((d) => d.total), 1)
-  const upd = new Date(updatedAt).toLocaleTimeString('pt-BR').slice(0, 5)
-
   app.innerHTML = `
     <div class="top">
       <img src="logo.png" alt="">
       <div>
         <h1>El Gharib</h1>
-        <div class="upd">atualizado às ${upd} ·
-          <span class="chip ${s.cash.open ? 'ok' : 'off'}">
-            ${s.cash.open ? 'caixa aberto · ' + money(s.cash.expected) + ' em espécie' : 'caixa fechado'}
-          </span>
+        <div class="upd">atualizado às ${new Date(updatedAt).toLocaleTimeString('pt-BR').slice(0, 5)} ·
+          <span class="chip ${s.cash.open ? 'ok' : 'off'}">${s.cash.open ? 'caixa aberto · ' + money(s.cash.expected) : 'caixa fechado'}</span>
         </div>
       </div>
     </div>
-
     <div class="cards">
       <div class="card"><div class="l">Hoje</div><div class="v">${money(t.total)}</div></div>
       <div class="card"><div class="l">Vendas</div><div class="v">${t.count}</div></div>
       <div class="card"><div class="l">Ticket</div><div class="v">${money(ticket)}</div></div>
     </div>
-
-    ${s.comandas.length ? `
-    <section>
-      <h2>📋 Comandas abertas (${s.comandas.length})</h2>
-      ${s.comandas.map((c) => `
-        <div class="comanda">
-          <div class="hd">
-            <span>${c.mesa ? 'Mesa ' + esc(c.mesa) : esc(c.customer_name)}${c.mesa && c.customer_name ? ' — ' + esc(c.customer_name) : ''}</span>
-            <span class="gold">${money(c.total)}</span>
-          </div>
-          <div class="it">${c.items.map((i) => `${i.qty}x ${esc(i.name)}`).join(' · ') || 'sem itens'}</div>
-        </div>`).join('')}
+    ${s.comandas.length ? `<section><h2>📋 Comandas abertas (${s.comandas.length})</h2>
+      ${s.comandas.map((c) => `<div class="comanda"><div class="hd">
+        <span>${c.mesa ? 'Mesa ' + esc(c.mesa) : esc(c.customer_name)}${c.mesa && c.customer_name ? ' — ' + esc(c.customer_name) : ''}</span>
+        <span class="gold">${money(c.total)}</span></div>
+        <div class="it">${c.items.map((i) => `${i.qty}x ${esc(i.name)}`).join(' · ') || 'sem itens'}</div></div>`).join('')}
     </section>` : ''}
-
-    <section>
-      <h2>📈 Últimos 7 dias</h2>
-      <div class="bars">
-        ${s.week.map((d) => `
-          <div class="bar">
-            <span class="t">${d.total ? money(d.total).replace('R$ ', '').split(',')[0] : ''}</span>
-            <div class="col" style="height:${Math.round((d.total / maxWeek) * 78)}%"></div>
-            <span class="d">${diaLabel(d.date)}</span>
-          </div>`).join('')}
-      </div>
-    </section>
-
-    ${t.byPayment.length ? `
-    <section>
-      <h2>💳 Por forma de pagamento</h2>
-      ${t.byPayment.map((p) => `
-        <div class="line"><span>${esc(p.payment_method)}</span><span class="gold">${money(p.total)}</span></div>`).join('')}
+    <section><h2>📈 Últimos 7 dias</h2><div class="bars">
+      ${s.week.map((d) => `<div class="bar">
+        <span class="t">${d.total ? money(d.total).replace('R$ ', '').split(',')[0] : ''}</span>
+        <div class="col" style="height:${Math.round((d.total / maxWeek) * 78)}%"></div>
+        <span class="d">${diaLabel(d.date)}</span></div>`).join('')}
+    </div></section>
+    ${t.byPayment.length ? `<section><h2>💳 Por forma de pagamento</h2>
+      ${t.byPayment.map((p) => `<div class="line"><span>${esc(p.payment_method)}</span><span class="gold">${money(p.total)}</span></div>`).join('')}
     </section>` : ''}
-
-    ${t.topProducts.length ? `
-    <section>
-      <h2>🏆 Mais vendidos hoje</h2>
-      ${t.topProducts.map((p) => `
-        <div class="line"><span>${esc(p.name)}</span><span class="muted">${p.qty}x · <span class="gold">${money(p.total)}</span></span></div>`).join('')}
+    ${t.topProducts.length ? `<section><h2>🏆 Mais vendidos hoje</h2>
+      ${t.topProducts.map((p) => `<div class="line"><span>${esc(p.name)}</span><span class="muted">${p.qty}x · <span class="gold">${money(p.total)}</span></span></div>`).join('')}
     </section>` : ''}
-
-    ${t.sales.length ? `
-    <section>
-      <h2>🧾 Vendas de hoje</h2>
-      ${t.sales.map((v) => `
-        <div class="line">
-          <span class="muted">${hora(v.created_at)} ${esc(v.who)}</span>
-          <span><span class="muted">${esc(v.payment_method)}</span> <span class="gold">${money(v.total)}</span></span>
-        </div>`).join('')}
+    ${t.sales.length ? `<section><h2>🧾 Vendas de hoje</h2>
+      ${t.sales.map((v) => `<div class="line"><span class="muted">${hora(v.created_at)} ${esc(v.who)}</span>
+        <span><span class="muted">${esc(v.payment_method)}</span> <span class="gold">${money(v.total)}</span></span></div>`).join('')}
     </section>` : ''}
-
-    ${s.low_stock.length ? `
-    <section>
-      <h2>⚠️ Estoque baixo (${s.low_stock.length})</h2>
-      <div class="tags">${s.low_stock.map((p) => `<span class="tag">${esc(p.name)}: ${p.stock}</span>`).join('')}</div>
-    </section>` : ''}
-
-    ${s.expiring.length ? `
-    <section>
-      <h2>📅 Vencendo em 30 dias (${s.expiring.length})</h2>
-      <div class="tags">${s.expiring.map((p) => `<span class="tag">${esc(p.name)}</span>`).join('')}</div>
-    </section>` : ''}
+    ${s.low_stock.length ? `<section><h2>⚠️ Estoque baixo (${s.low_stock.length})</h2>
+      <div class="tags">${s.low_stock.map((p) => `<span class="tag">${esc(p.name)}: ${p.stock}</span>`).join('')}</div></section>` : ''}
+    ${s.expiring.length ? `<section><h2>📅 Vencendo em 30 dias (${s.expiring.length})</h2>
+      <div class="tags">${s.expiring.map((p) => `<span class="tag">${esc(p.name)}</span>`).join('')}</div></section>` : ''}
   `
 }
 
+// ---------- PRODUTOS ----------
+function renderProdutos() {
+  const list = (snap.products || [])
+    .filter((p) => !pTerm || p.name.toLowerCase().includes(pTerm.toLowerCase()) || p.barcode === pTerm)
+    .slice(0, 80)
+  app.innerHTML = `
+    <div class="top"><img src="logo.png"><div><h1>Produtos</h1>
+      <div class="upd">${(snap.products || []).length} cadastrados · edite e o caixa aplica em ~15s</div></div></div>
+    <div class="search"><input placeholder="🔍 Buscar produto…" value="${esc(pTerm)}" oninput="setPTerm(this.value)"></div>
+    <button class="btn" style="margin:0 0 12px" onclick="openEdit('new')">+ Novo produto</button>
+    ${list.map((p) => `
+      <div class="prow ${p.active ? '' : 'inactive'}" onclick="openEdit(${p.id})">
+        <div class="nm">${esc(p.name)}${p.by_weight ? ' <span class="chip">kg</span>' : ''}${p.active ? '' : ' <span class="chip off">inativo</span>'}
+          <div class="sub">${esc(p.category)} · estoque ${String(p.stock).replace('.', ',')}${p.stock <= p.min_stock ? ' ⚠️' : ''}</div>
+        </div>
+        <span class="gold">${money(p.price)}${p.by_weight ? '/kg' : ''}</span>
+      </div>`).join('')}
+  `
+}
+window.setPTerm = (t) => { pTerm = t; renderProdutos(); refocus('.search input') }
+window.setVTerm = (t) => { vTerm = t; renderVenda(); refocus('.search input') }
+function refocus(sel) {
+  const el = document.querySelector(sel)
+  if (el) { const n = el.value.length; el.focus(); el.setSelectionRange(n, n) }
+}
+
+window.openEdit = (id) => {
+  const p = id === 'new'
+    ? { id: null, name: '', category: '', price: 0, cost: 0, stock: 0, min_stock: 0, barcode: '', active: 1, by_weight: 0 }
+    : snap.products.find((x) => x.id === id)
+  editP = p
+  const bg = document.createElement('div')
+  bg.className = 'sheet-bg'
+  bg.onclick = (e) => { if (e.target === bg) bg.remove() }
+  bg.innerHTML = `<div class="sheet">
+    <h2>${p.id ? 'Editar produto' : 'Novo produto'}</h2>
+    <label>Nome</label><input class="f" id="eNome" value="${esc(p.name)}">
+    <div class="grid2">
+      <div><label>Preço (R$)${p.by_weight ? ' /kg' : ''}</label>
+        <input class="f" id="ePreco" inputmode="numeric" value="${maskMoney(p.price)}" oninput="this.value = maskMoney(this.value)"></div>
+      <div><label>Custo (R$)</label>
+        <input class="f" id="eCusto" inputmode="numeric" value="${maskMoney(p.cost)}" oninput="this.value = maskMoney(this.value)"></div>
+    </div>
+    <div class="grid2">
+      <div><label>Estoque${p.by_weight ? ' (kg)' : ''}</label>
+        <input class="f" id="eEstoque" inputmode="decimal" value="${String(p.stock).replace('.', ',')}"></div>
+      <div><label>Estoque mínimo</label>
+        <input class="f" id="eMin" inputmode="decimal" value="${String(p.min_stock).replace('.', ',')}"></div>
+    </div>
+    <div class="grid2">
+      <div><label>Categoria</label><input class="f" id="eCat" value="${esc(p.category)}"></div>
+      <div><label>Código de barras</label><input class="f" id="eBar" inputmode="numeric" value="${esc(p.barcode || '')}"></div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:14px">
+      <input type="checkbox" id="eAtivo" ${p.active ? 'checked' : ''}> Produto ativo (aparece no caixa)
+    </label>
+    <button class="btn" onclick="saveEdit(this)">${p.id ? 'Salvar alterações' : 'Criar produto'}</button>
+    <button class="btn ghost" onclick="this.closest('.sheet-bg').remove()">Cancelar</button>
+  </div>`
+  document.body.appendChild(bg)
+}
+window.maskMoney = maskMoney
+
+window.saveEdit = async (btn) => {
+  const g = (id) => document.getElementById(id)
+  const num = (v) => parseFloat(String(v).replace(',', '.')) || 0
+  const payload = {
+    name: g('eNome').value.trim(),
+    price: cents(g('ePreco').value),
+    cost: cents(g('eCusto').value),
+    stock: num(g('eEstoque').value),
+    min_stock: num(g('eMin').value),
+    category: g('eCat').value.trim(),
+    barcode: g('eBar').value.trim(),
+    active: g('eAtivo').checked ? 1 : 0,
+    by_weight: editP.by_weight ? 1 : 0
+  }
+  if (!payload.name) { toast('Nome é obrigatório'); return }
+  btn.disabled = true
+  btn.textContent = 'Enviando…'
+  try {
+    if (editP.id) await sendCommand('product.update', { id: editP.id, ...payload })
+    else await sendCommand('product.create', payload)
+    // otimista: já reflete no app enquanto o caixa aplica
+    if (editP.id) Object.assign(snap.products.find((x) => x.id === editP.id), payload)
+    else snap.products.unshift({ id: 'novo', ...payload })
+    document.querySelector('.sheet-bg').remove()
+    toast('✓ Enviado — o caixa aplica em até 15s')
+    renderProdutos()
+  } catch (e) {
+    btn.disabled = false
+    btn.textContent = 'Tentar de novo'
+    toast('Falhou: ' + e.message)
+  }
+}
+
+// ---------- VENDA ----------
+function renderVenda() {
+  const list = (snap.products || [])
+    .filter((p) => p.active && !p.by_weight && p.stock > 0)
+    .filter((p) => !vTerm || p.name.toLowerCase().includes(vTerm.toLowerCase()) || p.barcode === vTerm)
+    .slice(0, 60)
+  const total = Object.entries(cart).reduce((a, [id, q]) => {
+    const p = snap.products.find((x) => x.id == id)
+    return a + (p ? p.price * q : 0)
+  }, 0)
+  const count = Object.values(cart).reduce((a, q) => a + q, 0)
+  app.innerHTML = `
+    <div class="top"><img src="logo.png"><div><h1>Venda rápida</h1>
+      <div class="upd">registra direto no caixa (produtos por unidade)</div></div></div>
+    <div class="search"><input placeholder="🔍 Buscar produto…" value="${esc(vTerm)}" oninput="setVTerm(this.value)"></div>
+    <section style="padding:10px 14px"><label style="margin:0 0 6px">Forma de pagamento</label>
+      <div class="paybtns">
+        ${['Dinheiro', 'PIX', 'Débito', 'Crédito'].map((m) =>
+          `<button class="${payMethod === m ? 'on' : ''}" onclick="setPay('${m}')">${m}</button>`).join('')}
+      </div>
+    </section>
+    ${list.map((p) => `
+      <div class="prow">
+        <div class="nm">${esc(p.name)}<div class="sub">${money(p.price)} · ${p.stock} em estoque</div></div>
+        <div class="stepper">
+          ${cart[p.id] ? `<button onclick="vDec(${p.id})">−</button><span>${cart[p.id]}</span>` : ''}
+          <button class="add" onclick="vInc(${p.id})">+</button>
+        </div>
+      </div>`).join('')}
+    ${count > 0 ? `<button class="cartbar" onclick="sendSale(this)">Registrar venda (${count}) · ${money(total)} — ${esc(payMethod)}</button>` : ''}
+  `
+}
+window.setPay = (m) => { payMethod = m; renderVenda() }
+window.vInc = (id) => { cart[id] = (cart[id] || 0) + 1; renderVenda() }
+window.vDec = (id) => { cart[id] = (cart[id] || 0) - 1; if (cart[id] <= 0) delete cart[id]; renderVenda() }
+
+window.sendSale = async (btn) => {
+  btn.disabled = true
+  btn.textContent = 'Enviando…'
+  try {
+    const items = Object.entries(cart).map(([id, qty]) => ({ id: Number(id), qty }))
+    await sendCommand('sale.create', { items, payment_method: payMethod })
+    cart = {}
+    toast('✓ Venda enviada — o caixa registra em até 15s')
+    renderVenda()
+  } catch (e) {
+    btn.disabled = false
+    toast('Falhou: ' + e.message)
+    renderVenda()
+  }
+}
+
 load()
-setInterval(load, 30000)
+setInterval(load, 20000)
 document.addEventListener('visibilitychange', () => { if (!document.hidden) load() })
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js')
 </script>

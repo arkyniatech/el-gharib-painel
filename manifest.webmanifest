@@ -1,0 +1,13 @@
+{
+  "name": "El Gharib — Painel",
+  "short_name": "El Gharib",
+  "description": "Painel do Empório El Gharib: vendas, comandas e estoque em tempo real",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0f1f17",
+  "theme_color": "#0f1f17",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

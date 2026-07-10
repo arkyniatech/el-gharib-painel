@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>El Gharib — Painel</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f1f17">
+<style>
+  :root {
+    --bg:#0f1f17; --panel:#172a20; --panel2:#1e3628; --border:#2c4a38;
+    --gold:#d4af37; --gold-l:#e9cd77; --text:#ede6d4; --muted:#96ac9c;
+    --danger:#d16a62; --ok:#52b98a; --warn:#e0a95c;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,'Segoe UI',Roboto,sans-serif;
+    padding:14px 14px calc(30px + env(safe-area-inset-bottom)); }
+  .top { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+  .top img { width:52px; height:52px; border-radius:50%; }
+  .top h1 { font-family:Georgia,serif; color:var(--gold); font-size:20px; margin:0; }
+  .top .upd { font-size:12px; color:var(--muted); }
+  .chip { display:inline-block; font-size:12px; border-radius:99px; padding:3px 12px;
+    background:var(--panel2); color:var(--muted); }
+  .chip.ok { color:var(--ok); }
+  .chip.off { color:var(--danger); }
+  .cards { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:12px 10px; text-align:center; }
+  .card .l { font-size:11px; color:var(--muted); }
+  .card .v { font-size:17px; font-weight:800; color:var(--gold-l); margin-top:4px; }
+  section { background:var(--panel); border:1px solid var(--border); border-radius:14px;
+    padding:14px; margin-bottom:12px; }
+  section h2 { font-family:Georgia,serif; color:var(--gold); font-size:16px; margin:0 0 10px; }
+  .line { display:flex; justify-content:space-between; gap:10px; padding:7px 0;
+    border-bottom:1px solid #22392c; font-size:14px; }
+  .line:last-child { border-bottom:none; }
+  .gold { color:var(--gold-l); font-weight:700; }
+  .muted { color:var(--muted); }
+  .bars { display:flex; align-items:flex-end; gap:6px; height:110px; padding-top:6px; }
+  .bar { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; height:100%; justify-content:flex-end; }
+  .bar .col { width:100%; background:linear-gradient(180deg,var(--gold-l),var(--gold)); border-radius:5px 5px 0 0; min-height:2px; }
+  .bar .d { font-size:10px; color:var(--muted); }
+  .bar .t { font-size:9px; color:var(--gold-l); }
+  .comanda { background:var(--panel2); border:1px solid var(--border); border-radius:12px;
+    padding:10px 12px; margin-bottom:8px; }
+  .comanda .hd { display:flex; justify-content:space-between; font-weight:700; }
+  .comanda .it { font-size:12px; color:var(--muted); margin-top:4px; }
+  .tags { display:flex; flex-wrap:wrap; gap:6px; }
+  .tag { font-size:12px; border-radius:99px; padding:4px 12px; background:#3a2c1a; color:var(--warn); }
+  .center { text-align:center; padding:50px 20px; color:var(--muted); }
+  .center .big { font-size:50px; }
+</style>
+</head>
+<body>
+<div id="app"><div class="center"><div class="big">💎</div>Carregando o painel…</div></div>
+
+<script>
+const SUPABASE_URL = 'https://znnimedzlfllqbhguguj.supabase.co'
+const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpubmltZWR6bGZsbHFiaGd1Z3VqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg2OTA1MjMsImV4cCI6MjA4NDI2NjUyM30.hKninXOBl1ln6LdPpO6SpWexlcXs3Qlp3wZO9E7bj-8'
+
+// Token secreto: chega na URL (?t=...) uma vez e fica salvo no aparelho
+const params = new URLSearchParams(location.search)
+if (params.get('t')) {
+  localStorage.setItem('token', params.get('t'))
+  history.replaceState(null, '', location.pathname)
+}
+const TOKEN = localStorage.getItem('token')
+
+const app = document.getElementById('app')
+const money = (c) => ((c || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))
+const hora = (ts) => (ts || '').includes(' ') ? ts.split(' ')[1].slice(0, 5) : new Date(ts).toLocaleTimeString('pt-BR').slice(0, 5)
+const diaLabel = (iso) => ['dom','seg','ter','qua','qui','sex','sáb'][new Date(iso + 'T12:00:00').getDay()]
+
+async function load() {
+  if (!TOKEN) {
+    app.innerHTML = '<div class="center"><div class="big">🔒</div>Link inválido.<br>Peça o link completo do painel.</div>'
+    return
+  }
+  try {
+    const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/gharib_painel', {
+      method: 'POST',
+      headers: { apikey: ANON_KEY, Authorization: 'Bearer ' + ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_token: TOKEN })
+    })
+    const data = await r.json()
+    if (!data || !data.snapshot) throw new Error('sem dados')
+    render(data.snapshot, data.updated_at)
+  } catch (e) {
+    if (!document.querySelector('.top')) {
+      app.innerHTML = '<div class="center"><div class="big">📡</div>Sem conexão com o painel.<br>Puxe pra atualizar ou confira a internet.</div>'
+    }
+  }
+}
+
+function render(s, updatedAt) {
+  const t = s.today
+  const ticket = t.count > 0 ? Math.round(t.total / t.count) : 0
+  const maxWeek = Math.max(...s.week.map((d) => d.total), 1)
+  const upd = new Date(updatedAt).toLocaleTimeString('pt-BR').slice(0, 5)
+
+  app.innerHTML = `
+    <div class="top">
+      <img src="logo.png" alt="">
+      <div>
+        <h1>El Gharib</h1>
+        <div class="upd">atualizado às ${upd} ·
+          <span class="chip ${s.cash.open ? 'ok' : 'off'}">
+            ${s.cash.open ? 'caixa aberto · ' + money(s.cash.expected) + ' em espécie' : 'caixa fechado'}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="l">Hoje</div><div class="v">${money(t.total)}</div></div>
+      <div class="card"><div class="l">Vendas</div><div class="v">${t.count}</div></div>
+      <div class="card"><div class="l">Ticket</div><div class="v">${money(ticket)}</div></div>
+    </div>
+
+    ${s.comandas.length ? `
+    <section>
+      <h2>📋 Comandas abertas (${s.comandas.length})</h2>
+      ${s.comandas.map((c) => `
+        <div class="comanda">
+          <div class="hd">
+            <span>${c.mesa ? 'Mesa ' + esc(c.mesa) : esc(c.customer_name)}${c.mesa && c.customer_name ? ' — ' + esc(c.customer_name) : ''}</span>
+            <span class="gold">${money(c.total)}</span>
+          </div>
+          <div class="it">${c.items.map((i) => `${i.qty}x ${esc(i.name)}`).join(' · ') || 'sem itens'}</div>
+        </div>`).join('')}
+    </section>` : ''}
+
+    <section>
+      <h2>📈 Últimos 7 dias</h2>
+      <div class="bars">
+        ${s.week.map((d) => `
+          <div class="bar">
+            <span class="t">${d.total ? money(d.total).replace('R$ ', '').split(',')[0] : ''}</span>
+            <div class="col" style="height:${Math.round((d.total / maxWeek) * 78)}%"></div>
+            <span class="d">${diaLabel(d.date)}</span>
+          </div>`).join('')}
+      </div>
+    </section>
+
+    ${t.byPayment.length ? `
+    <section>
+      <h2>💳 Por forma de pagamento</h2>
+      ${t.byPayment.map((p) => `
+        <div class="line"><span>${esc(p.payment_method)}</span><span class="gold">${money(p.total)}</span></div>`).join('')}
+    </section>` : ''}
+
+    ${t.topProducts.length ? `
+    <section>
+      <h2>🏆 Mais vendidos hoje</h2>
+      ${t.topProducts.map((p) => `
+        <div class="line"><span>${esc(p.name)}</span><span class="muted">${p.qty}x · <span class="gold">${money(p.total)}</span></span></div>`).join('')}
+    </section>` : ''}
+
+    ${t.sales.length ? `
+    <section>
+      <h2>🧾 Vendas de hoje</h2>
+      ${t.sales.map((v) => `
+        <div class="line">
+          <span class="muted">${hora(v.created_at)} ${esc(v.who)}</span>
+          <span><span class="muted">${esc(v.payment_method)}</span> <span class="gold">${money(v.total)}</span></span>
+        </div>`).join('')}
+    </section>` : ''}
+
+    ${s.low_stock.length ? `
+    <section>
+      <h2>⚠️ Estoque baixo (${s.low_stock.length})</h2>
+      <div class="tags">${s.low_stock.map((p) => `<span class="tag">${esc(p.name)}: ${p.stock}</span>`).join('')}</div>
+    </section>` : ''}
+
+    ${s.expiring.length ? `
+    <section>
+      <h2>📅 Vencendo em 30 dias (${s.expiring.length})</h2>
+      <div class="tags">${s.expiring.map((p) => `<span class="tag">${esc(p.name)}</span>`).join('')}</div>
+    </section>` : ''}
+  `
+}
+
+load()
+setInterval(load, 30000)
+document.addEventListener('visibilitychange', () => { if (!document.hidden) load() })
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js')
+</script>
+</body>
+</html>

@@ -105,6 +105,7 @@
   <button class="tab" data-v="venda" onclick="go('venda')"><span class="ic">🛒</span>Venda</button>
 </nav>
 
+<script src="zxing.js"></script>
 <script>
 const SUPABASE_URL = 'https://znnimedzlfllqbhguguj.supabase.co'
 const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpubmltZWR6bGZsbHFiaGd1Z3VqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg2OTA1MjMsImV4cCI6MjA4NDI2NjUyM30.hKninXOBl1ln6LdPpO6SpWexlcXs3Qlp3wZO9E7bj-8'
@@ -291,7 +292,12 @@ window.openEdit = (id) => {
     </div>
     <div class="grid2">
       <div><label>Categoria</label><input class="f" id="eCat" value="${esc(p.category)}"></div>
-      <div><label>Código de barras</label><input class="f" id="eBar" inputmode="numeric" value="${esc(p.barcode || '')}"></div>
+      <div><label>Código de barras</label>
+        <div style="display:flex;gap:6px">
+          <input class="f" id="eBar" inputmode="numeric" value="${esc(p.barcode || '')}">
+          <button type="button" class="btn" style="margin:0;width:52px;flex-shrink:0;font-size:22px;padding:0" onclick="openScanner()" title="Ler com a câmera">📷</button>
+        </div>
+      </div>
     </div>
     <label style="display:flex;align-items:center;gap:8px;margin-top:14px">
       <input type="checkbox" id="eAtivo" ${p.active ? 'checked' : ''}> Produto ativo (aparece no caixa)
@@ -302,6 +308,44 @@ window.openEdit = (id) => {
   document.body.appendChild(bg)
 }
 window.maskMoney = maskMoney
+
+// Leitor de código de barras pela câmera (ZXing). Preenche o campo #eBar.
+let scanReader = null
+window.openScanner = async () => {
+  if (typeof ZXing === 'undefined') { toast('Leitor não carregou — verifique a internet'); return }
+  const ov = document.createElement('div')
+  ov.id = 'scanOverlay'
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden'
+  ov.innerHTML = `
+    <video id="scanVideo" playsinline muted style="width:100%;height:100%;object-fit:cover"></video>
+    <div style="position:absolute;width:78%;height:28%;border:3px solid var(--gold-l);border-radius:14px;box-shadow:0 0 0 100vmax #0009"></div>
+    <div style="position:absolute;top:calc(18px + env(safe-area-inset-top));left:0;right:0;text-align:center;color:#fff;font-weight:700">Aponte pro código de barras</div>
+    <button onclick="closeScanner()" style="position:absolute;bottom:calc(28px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:#fff;color:#111;border:none;border-radius:99px;padding:14px 34px;font-size:16px;font-weight:800">Fechar</button>`
+  document.body.appendChild(ov)
+  const video = ov.querySelector('#scanVideo')
+  try {
+    scanReader = new ZXing.BrowserMultiFormatReader()
+    await scanReader.decodeFromConstraints({ video: { facingMode: 'environment' } }, video, (result) => {
+      if (!result) return
+      const code = (result.text || (result.getText && result.getText()) || '').replace(/\D/g, '')
+      if (code.length >= 6) {
+        const inp = document.getElementById('eBar')
+        if (inp) inp.value = code
+        if (navigator.vibrate) navigator.vibrate(120)
+        closeScanner()
+        toast('Código lido: ' + code)
+      }
+    })
+  } catch (e) {
+    closeScanner()
+    toast('Não consegui abrir a câmera. Permita o acesso nas configurações.')
+  }
+}
+window.closeScanner = () => {
+  try { if (scanReader) scanReader.reset() } catch {}
+  scanReader = null
+  document.getElementById('scanOverlay')?.remove()
+}
 
 // Redimensiona a foto no próprio celular (máx 512px) e guarda como data URL
 window.onPhotoPick = (input) => {

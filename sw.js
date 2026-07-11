@@ -1,7 +1,7 @@
 // Painel: prioriza a REDE (rede-primeiro), cai pro cache só se estiver offline.
 // Assim toda atualização aparece na hora, sem ficar preso a versão antiga.
-const CACHE = 'painel-v4'
-const SHELL = ['./', './index.html', './logo.png', './manifest.webmanifest', './icon-192.png', './icon-512.png']
+const CACHE = 'painel-v5'
+const SHELL = ['./', './index.html', './zxing.js', './logo.png', './manifest.webmanifest', './icon-192.png', './icon-512.png']
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)))

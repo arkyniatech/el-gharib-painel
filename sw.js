@@ -1,5 +1,6 @@
-// Cache do "casco" do app — os dados sempre vêm da rede
-const CACHE = 'painel-v3'
+// Painel: prioriza a REDE (rede-primeiro), cai pro cache só se estiver offline.
+// Assim toda atualização aparece na hora, sem ficar preso a versão antiga.
+const CACHE = 'painel-v4'
 const SHELL = ['./', './index.html', './logo.png', './manifest.webmanifest', './icon-192.png', './icon-512.png']
 
 self.addEventListener('install', (e) => {
@@ -16,7 +17,14 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url)
-  if (url.origin === location.origin) {
-    e.respondWith(caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || fetch(e.request)))
-  }
+  if (url.origin !== location.origin) return // dados da Supabase sempre pela rede
+  e.respondWith(
+    fetch(e.request)
+      .then((res) => {
+        const copy = res.clone()
+        caches.open(CACHE).then((c) => c.put(e.request, copy))
+        return res
+      })
+      .catch(() => caches.match(e.request, { ignoreSearch: true }))
+  )
 })

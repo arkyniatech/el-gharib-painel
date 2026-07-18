@@ -101,6 +101,7 @@
 <div id="app"><div class="center"><div class="big">💎</div>Carregando…</div></div>
 <nav class="tabbar" id="tabbar" style="display:none">
   <button class="tab on" data-v="painel" onclick="go('painel')"><span class="ic">📊</span>Painel</button>
+  <button class="tab" data-v="comandas" onclick="go('comandas')"><span class="ic">📋</span>Comandas</button>
   <button class="tab" data-v="produtos" onclick="go('produtos')"><span class="ic">📦</span>Produtos</button>
   <button class="tab" data-v="venda" onclick="go('venda')"><span class="ic">🛒</span>Venda</button>
 </nav>
@@ -120,6 +121,9 @@ const TOKEN = localStorage.getItem('token')
 
 let snap = null, updatedAt = null, view = 'painel'
 let pTerm = '', vTerm = '', cart = {}, payMethod = 'PIX', editP = null
+let selectedMesa = null, cTerm = ''
+let editedIds = new Set(JSON.parse(localStorage.getItem('editedIds') || '[]'))
+function markEdited(id) { editedIds.add(id); localStorage.setItem('editedIds', JSON.stringify([...editedIds])) }
 const app = document.getElementById('app')
 
 const money = (c) => ((c || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -181,6 +185,7 @@ window.go = (v) => {
 function render() {
   if (!snap) return
   if (view === 'painel') renderPainel()
+  if (view === 'comandas') renderComandas()
   if (view === 'produtos') renderProdutos()
   if (view === 'venda') renderVenda()
 }
@@ -243,10 +248,13 @@ function renderProdutos() {
     <div class="top"><img src="logo.png"><div><h1>Produtos</h1>
       <div class="upd">${(snap.products || []).length} cadastrados · edite e o caixa aplica em ~15s</div></div></div>
     <div class="search"><input placeholder="🔍 Buscar produto…" value="${esc(pTerm)}" oninput="setPTerm(this.value)"></div>
-    <button class="btn" style="margin:0 0 12px" onclick="openEdit('new')">+ Novo produto</button>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn" style="margin:0;flex:1" onclick="openEdit('new')">+ Novo produto</button>
+      ${editedIds.size ? `<button class="btn ghost" style="margin:0;width:auto;padding:0 14px" onclick="clearEdited()">Limpar ✓ (${editedIds.size})</button>` : ''}
+    </div>
     ${list.map((p) => `
-      <div class="prow ${p.active ? '' : 'inactive'}" onclick="openEdit(${p.id})">
-        <div class="nm">${esc(p.name)}${p.by_weight ? ' <span class="chip">kg</span>' : ''}${p.active ? '' : ' <span class="chip off">inativo</span>'}
+      <div class="prow ${p.active ? '' : 'inactive'}" onclick="openEdit(${p.id})" ${editedIds.has(p.id) ? 'style="border-color:var(--ok)"' : ''}>
+        <div class="nm">${esc(p.name)}${p.by_weight ? ' <span class="chip">kg</span>' : ''}${p.active ? '' : ' <span class="chip off">inativo</span>'}${editedIds.has(p.id) ? ' <span class="chip" style="color:var(--ok)">✓ editado</span>' : ''}
           <div class="sub">${esc(p.category)} · estoque ${String(p.stock).replace('.', ',')}${p.stock <= p.min_stock ? ' ⚠️' : ''}</div>
         </div>
         <span class="gold">${money(p.price)}${p.by_weight ? '/kg' : ''}</span>
@@ -254,6 +262,7 @@ function renderProdutos() {
   `
 }
 window.setPTerm = (t) => { pTerm = t; renderProdutos(); refocus('.search input') }
+window.clearEdited = () => { if (confirm('Limpar as marcações de editado?')) { editedIds = new Set(); localStorage.removeItem('editedIds'); renderProdutos() } }
 window.setVTerm = (t) => { vTerm = t; renderVenda(); refocus('.search input') }
 function refocus(sel) {
   const el = document.querySelector(sel)
@@ -392,7 +401,7 @@ window.saveEdit = async (btn) => {
   btn.disabled = true
   btn.textContent = 'Enviando…'
   try {
-    if (editP.id) await sendCommand('product.update', { id: editP.id, ...payload })
+    if (editP.id) { await sendCommand('product.update', { id: editP.id, ...payload }); markEdited(editP.id) }
     else await sendCommand('product.create', payload)
     // otimista: já reflete no app enquanto o caixa aplica
     if (editP.id) Object.assign(snap.products.find((x) => x.id === editP.id), payload)
@@ -404,6 +413,74 @@ window.saveEdit = async (btn) => {
     btn.disabled = false
     btn.textContent = 'Tentar de novo'
     toast('Falhou: ' + e.message)
+  }
+}
+
+// ---------- COMANDAS (dono cadastra os pedidos das mesas) ----------
+function renderComandas() {
+  if (selectedMesa !== null) return renderComandaDetail()
+  const list = snap.comandas || []
+  app.innerHTML = `
+    <div class="top"><img src="logo.png"><div><h1>Comandas</h1>
+      <div class="upd">${list.length} aberta(s) · toque pra adicionar pedidos</div></div></div>
+    <button class="btn" style="margin:0 0 12px" onclick="novaMesa()">+ Nova mesa</button>
+    ${list.map((c) => `
+      <div class="prow" onclick="abrirMesa('${esc(String(c.mesa || ''))}')">
+        <div class="nm">${c.mesa ? 'Mesa ' + esc(c.mesa) : esc(c.customer_name || 'Comanda')}
+          <div class="sub">${c.items.length} ${c.items.length === 1 ? 'item' : 'itens'}${c.items.length ? ' · ' + esc(c.items.map((i) => i.qty + 'x ' + i.name).join(', ')).slice(0, 46) : ''}</div>
+        </div>
+        <span class="gold">${money(c.total)}</span>
+      </div>`).join('') || '<p class="center muted">Nenhuma comanda aberta.<br>Toque em "+ Nova mesa" pra começar.</p>'}
+  `
+}
+
+window.novaMesa = () => {
+  const mesa = prompt('Número da mesa:')
+  if (mesa && mesa.trim()) abrirMesa(mesa.trim())
+}
+window.abrirMesa = (mesa) => { selectedMesa = mesa; cTerm = ''; renderComandas() }
+window.voltarComandas = () => { selectedMesa = null; cTerm = ''; renderComandas() }
+window.setCTerm = (t) => { cTerm = t; renderComandaDetail(); refocus('.search input') }
+
+function renderComandaDetail() {
+  const c = (snap.comandas || []).find((x) => String(x.mesa) === String(selectedMesa))
+  const items = c ? c.items : []
+  const total = c ? c.total : 0
+  const prods = (snap.products || [])
+    .filter((p) => p.active && !p.by_weight && p.stock > 0)
+    .filter((p) => !cTerm || p.name.toLowerCase().includes(cTerm.toLowerCase()) || p.barcode === cTerm)
+    .slice(0, 40)
+  app.innerHTML = `
+    <div class="top">
+      <button class="btn ghost" style="width:auto;margin:0;padding:8px 14px;font-size:18px" onclick="voltarComandas()">←</button>
+      <div><h1>Mesa ${esc(selectedMesa)}</h1><div class="upd">${money(total)} · ${items.length} ${items.length === 1 ? 'item' : 'itens'}</div></div>
+    </div>
+    ${items.length ? '<section>' + items.map((i) => `<div class="line"><span>${i.qty}x ${esc(i.name)}</span><span class="gold">${money(i.qty * i.unit_price)}</span></div>`).join('') + '</section>' : '<p class="muted" style="text-align:center;margin:10px 0">Sem itens ainda — busque e toque num produto.</p>'}
+    <div class="search"><input placeholder="🔍 Adicionar produto…" value="${esc(cTerm)}" oninput="setCTerm(this.value)"></div>
+    ${prods.map((p) => `
+      <div class="prow" onclick="addComandaItem(${p.id})">
+        <div class="nm">${esc(p.name)}<div class="sub">${money(p.price)} · ${p.stock} em estoque</div></div>
+        <button class="add" style="width:38px;height:38px;border-radius:10px;background:linear-gradient(180deg,var(--gold-l),var(--gold));color:#21301c;border:none;font-size:20px;font-weight:800">+</button>
+      </div>`).join('')}
+  `
+}
+
+window.addComandaItem = async (productId) => {
+  const prod = (snap.products || []).find((p) => p.id === productId)
+  if (!prod) return
+  // otimista: reflete na hora na comanda local
+  let c = (snap.comandas || []).find((x) => String(x.mesa) === String(selectedMesa))
+  if (!c) { c = { id: null, mesa: selectedMesa, customer_name: '', total: 0, items: [] }; (snap.comandas = snap.comandas || []).push(c) }
+  const ex = c.items.find((i) => i.name === prod.name && i.unit_price === prod.price)
+  if (ex) ex.qty += 1
+  else c.items.push({ name: prod.name, qty: 1, unit_price: prod.price })
+  c.total = c.items.reduce((a, i) => a + i.qty * i.unit_price, 0)
+  renderComandaDetail()
+  if (navigator.vibrate) navigator.vibrate(30)
+  try {
+    await sendCommand('comanda.addItem', { mesa: selectedMesa, product_id: productId, qty: 1 })
+  } catch (e) {
+    toast('Falhou ao enviar: ' + e.message)
   }
 }
 

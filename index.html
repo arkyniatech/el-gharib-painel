@@ -124,6 +124,7 @@ let pTerm = '', vTerm = '', cart = {}, payMethod = 'PIX', editP = null
 let selectedMesa = null, cTerm = ''
 let localComandas = JSON.parse(localStorage.getItem('localComandas') || '{}')
 let lastServerMesas = []
+let closingMesas = new Set()
 function saveLocalComandas() { localStorage.setItem('localComandas', JSON.stringify(localComandas)) }
 let editedIds = new Set(JSON.parse(localStorage.getItem('editedIds') || '[]'))
 function markEdited(id) { editedIds.add(id); localStorage.setItem('editedIds', JSON.stringify([...editedIds])) }
@@ -178,6 +179,7 @@ async function load() {
         if (String(selectedMesa) === mesa) selectedMesa = null
       }
     }
+    for (const mesa of [...closingMesas]) if (!serverMesas.includes(mesa)) closingMesas.delete(mesa)
     lastServerMesas = serverMesas
     saveLocalComandas()
     document.getElementById('tabbar').style.display = 'flex'
@@ -446,6 +448,7 @@ function comandasList() {
   for (const c of (snap.comandas || [])) byMesa[String(c.mesa)] = { mesa: c.mesa, customer_name: c.customer_name, items: c.items }
   for (const mesa of Object.keys(localComandas)) byMesa[mesa] = { mesa, customer_name: (byMesa[mesa] || {}).customer_name || '', items: localComandas[mesa] }
   return Object.values(byMesa)
+    .filter((c) => !closingMesas.has(String(c.mesa)))
     .map((c) => ({ ...c, total: c.items.reduce((a, i) => a + i.qty * i.unit_price, 0) }))
     .sort((a, b) => String(a.mesa).localeCompare(String(b.mesa), undefined, { numeric: true }))
 }
@@ -494,7 +497,54 @@ function renderComandaDetail() {
         <div class="nm">${esc(p.name)}<div class="sub">${money(p.price)} · ${p.stock} em estoque</div></div>
         <button class="add" style="width:38px;height:38px;border-radius:10px;background:linear-gradient(180deg,var(--gold-l),var(--gold));color:#21301c;border:none;font-size:20px;font-weight:800">+</button>
       </div>`).join('')}
+    ${items.length ? `<button class="cartbar" onclick="finalizarComanda()">Finalizar comanda · ${money(total)}</button>` : ''}
   `
+}
+
+// Fecha a comanda pelo celular: escolhe forma de pagamento e registra a venda no caixa.
+// (Impressão do cupom e NFC-e continuam no caixa.)
+window.finalizarComanda = () => {
+  const items = comandaItemsFor(selectedMesa)
+  const total = items.reduce((a, i) => a + i.qty * i.unit_price, 0)
+  if (!items.length) { toast('Comanda vazia'); return }
+  const mesa = selectedMesa
+  const bg = document.createElement('div')
+  bg.className = 'sheet-bg'
+  bg.onclick = (e) => { if (e.target === bg) bg.remove() }
+  bg.innerHTML = `<div class="sheet">
+    <h2>Finalizar — Mesa ${esc(mesa)}</h2>
+    <div class="line" style="font-size:17px"><span>Total</span><b class="gold" style="font-size:22px">${money(total)}</b></div>
+    <label>Forma de pagamento</label>
+    <div class="paybtns" id="fpag">
+      ${['Dinheiro', 'PIX', 'Débito', 'Crédito'].map((m, i) => `<button class="${i === 0 ? 'on' : ''}" onclick="pickPag(this,'${m}')">${m}</button>`).join('')}
+    </div>
+    <p class="muted" style="font-size:13px;margin-top:12px">O cupom e a NFC-e são impressos no caixa.</p>
+    <button class="btn" onclick="confirmarFinalizar('${esc(mesa)}', this)">Fechar e registrar no caixa</button>
+    <button class="btn ghost" onclick="this.closest('.sheet-bg').remove()">Cancelar</button>
+  </div>`
+  document.body.appendChild(bg)
+  bg.dataset.pag = 'Dinheiro'
+}
+window.pickPag = (btn, m) => {
+  const box = btn.closest('#fpag'); box.querySelectorAll('button').forEach((b) => b.classList.remove('on'))
+  btn.classList.add('on'); btn.closest('.sheet-bg').dataset.pag = m
+}
+window.confirmarFinalizar = async (mesa, btn) => {
+  const pag = btn.closest('.sheet-bg').dataset.pag || 'Dinheiro'
+  btn.disabled = true; btn.textContent = 'Enviando…'
+  try {
+    await sendCommand('comanda.close', { mesa, payment_method: pag })
+    closingMesas.add(String(mesa))
+    delete localComandas[String(mesa)]
+    saveLocalComandas()
+    document.querySelector('.sheet-bg').remove()
+    selectedMesa = null
+    toast('✓ Comanda fechada — registrada no caixa (' + pag + ')')
+    renderComandas()
+  } catch (e) {
+    btn.disabled = false; btn.textContent = 'Tentar de novo'
+    toast('Falhou: ' + e.message)
+  }
 }
 
 // Garante um rascunho local pra mesa (seedando com o que veio da nuvem)

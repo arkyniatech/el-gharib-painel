@@ -122,6 +122,9 @@ const TOKEN = localStorage.getItem('token')
 let snap = null, updatedAt = null, view = 'painel'
 let pTerm = '', vTerm = '', cart = {}, payMethod = 'PIX', editP = null
 let selectedMesa = null, cTerm = ''
+let localComandas = JSON.parse(localStorage.getItem('localComandas') || '{}')
+let lastServerMesas = []
+function saveLocalComandas() { localStorage.setItem('localComandas', JSON.stringify(localComandas)) }
 let editedIds = new Set(JSON.parse(localStorage.getItem('editedIds') || '[]'))
 function markEdited(id) { editedIds.add(id); localStorage.setItem('editedIds', JSON.stringify([...editedIds])) }
 const app = document.getElementById('app')
@@ -167,6 +170,16 @@ async function load() {
     if (!data || !data.snapshot) throw new Error('sem dados')
     snap = data.snapshot
     updatedAt = data.updated_at
+    // Comanda paga/fechada no caixa (estava na nuvem e sumiu) → limpa o rascunho local
+    const serverMesas = (snap.comandas || []).map((c) => String(c.mesa))
+    for (const mesa of Object.keys(localComandas)) {
+      if (lastServerMesas.includes(mesa) && !serverMesas.includes(mesa)) {
+        delete localComandas[mesa]
+        if (String(selectedMesa) === mesa) selectedMesa = null
+      }
+    }
+    lastServerMesas = serverMesas
+    saveLocalComandas()
     document.getElementById('tabbar').style.display = 'flex'
     const busy = document.querySelector('.sheet-bg') ||
       ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)
@@ -417,9 +430,29 @@ window.saveEdit = async (btn) => {
 }
 
 // ---------- COMANDAS (dono cadastra os pedidos das mesas) ----------
+// O celular mantém uma cópia LOCAL de cada comanda (localComandas), que sobrevive
+// à atualização da nuvem e a trocar de mesa — os itens só vão SOMANDO, nunca substituem.
+
+function comandaItemsFor(mesa) {
+  const key = String(mesa)
+  if (localComandas[key]) return localComandas[key]
+  const c = (snap.comandas || []).find((x) => String(x.mesa) === key)
+  return c ? c.items.map((i) => ({ product_id: i.product_id, name: i.name, qty: i.qty, unit_price: i.unit_price })) : []
+}
+
+// Une comandas da nuvem com rascunhos locais (mesa ainda não sincronizada também aparece)
+function comandasList() {
+  const byMesa = {}
+  for (const c of (snap.comandas || [])) byMesa[String(c.mesa)] = { mesa: c.mesa, customer_name: c.customer_name, items: c.items }
+  for (const mesa of Object.keys(localComandas)) byMesa[mesa] = { mesa, customer_name: (byMesa[mesa] || {}).customer_name || '', items: localComandas[mesa] }
+  return Object.values(byMesa)
+    .map((c) => ({ ...c, total: c.items.reduce((a, i) => a + i.qty * i.unit_price, 0) }))
+    .sort((a, b) => String(a.mesa).localeCompare(String(b.mesa), undefined, { numeric: true }))
+}
+
 function renderComandas() {
   if (selectedMesa !== null) return renderComandaDetail()
-  const list = snap.comandas || []
+  const list = comandasList()
   app.innerHTML = `
     <div class="top"><img src="logo.png"><div><h1>Comandas</h1>
       <div class="upd">${list.length} aberta(s) · toque pra adicionar pedidos</div></div></div>
@@ -438,14 +471,13 @@ window.novaMesa = () => {
   const mesa = prompt('Número da mesa:')
   if (mesa && mesa.trim()) abrirMesa(mesa.trim())
 }
-window.abrirMesa = (mesa) => { selectedMesa = mesa; cTerm = ''; renderComandas() }
+window.abrirMesa = (mesa) => { selectedMesa = String(mesa); cTerm = ''; renderComandas() }
 window.voltarComandas = () => { selectedMesa = null; cTerm = ''; renderComandas() }
 window.setCTerm = (t) => { cTerm = t; renderComandaDetail(); refocus('.search input') }
 
 function renderComandaDetail() {
-  const c = (snap.comandas || []).find((x) => String(x.mesa) === String(selectedMesa))
-  const items = c ? c.items : []
-  const total = c ? c.total : 0
+  const items = comandaItemsFor(selectedMesa)
+  const total = items.reduce((a, i) => a + i.qty * i.unit_price, 0)
   const prods = (snap.products || [])
     .filter((p) => p.active && !p.by_weight && p.stock > 0)
     .filter((p) => !cTerm || p.name.toLowerCase().includes(cTerm.toLowerCase()) || p.barcode === cTerm)
@@ -455,7 +487,7 @@ function renderComandaDetail() {
       <button class="btn ghost" style="width:auto;margin:0;padding:8px 14px;font-size:18px" onclick="voltarComandas()">←</button>
       <div><h1>Mesa ${esc(selectedMesa)}</h1><div class="upd">${money(total)} · ${items.length} ${items.length === 1 ? 'item' : 'itens'}</div></div>
     </div>
-    ${items.length ? '<section>' + items.map((i) => `<div class="line"><span>${i.qty}x ${esc(i.name)}</span><span class="gold">${money(i.qty * i.unit_price)}</span></div>`).join('') + '</section>' : '<p class="muted" style="text-align:center;margin:10px 0">Sem itens ainda — busque e toque num produto.</p>'}
+    ${items.length ? '<section>' + items.map((i, idx) => `<div class="line"><span>${i.qty}x ${esc(i.name)}</span><span style="display:flex;align-items:center;gap:12px"><span class="gold">${money(i.qty * i.unit_price)}</span><button onclick="decComandaItem(${idx})" style="background:none;border:none;color:var(--danger);font-size:20px;line-height:1;padding:0 4px">−</button></span></div>`).join('') + '</section>' : '<p class="muted" style="text-align:center;margin:10px 0">Sem itens ainda — busque e toque num produto.</p>'}
     <div class="search"><input placeholder="🔍 Adicionar produto…" value="${esc(cTerm)}" oninput="setCTerm(this.value)"></div>
     ${prods.map((p) => `
       <div class="prow" onclick="addComandaItem(${p.id})">
@@ -465,23 +497,43 @@ function renderComandaDetail() {
   `
 }
 
+// Garante um rascunho local pra mesa (seedando com o que veio da nuvem)
+function ensureDraft(mesa) {
+  const key = String(mesa)
+  if (!localComandas[key]) {
+    const c = (snap.comandas || []).find((x) => String(x.mesa) === key)
+    localComandas[key] = c ? c.items.map((i) => ({ product_id: i.product_id, name: i.name, qty: i.qty, unit_price: i.unit_price })) : []
+  }
+  return localComandas[key]
+}
+
 window.addComandaItem = async (productId) => {
   const prod = (snap.products || []).find((p) => p.id === productId)
   if (!prod) return
-  // otimista: reflete na hora na comanda local
-  let c = (snap.comandas || []).find((x) => String(x.mesa) === String(selectedMesa))
-  if (!c) { c = { id: null, mesa: selectedMesa, customer_name: '', total: 0, items: [] }; (snap.comandas = snap.comandas || []).push(c) }
-  const ex = c.items.find((i) => i.name === prod.name && i.unit_price === prod.price)
+  const items = ensureDraft(selectedMesa)
+  const ex = items.find((i) => i.product_id === productId)
   if (ex) ex.qty += 1
-  else c.items.push({ name: prod.name, qty: 1, unit_price: prod.price })
-  c.total = c.items.reduce((a, i) => a + i.qty * i.unit_price, 0)
+  else items.push({ product_id: productId, name: prod.name, qty: 1, unit_price: prod.price })
+  saveLocalComandas()
   renderComandaDetail()
   if (navigator.vibrate) navigator.vibrate(30)
-  try {
-    await sendCommand('comanda.addItem', { mesa: selectedMesa, product_id: productId, qty: 1 })
-  } catch (e) {
-    toast('Falhou ao enviar: ' + e.message)
-  }
+  try { await sendCommand('comanda.addItem', { mesa: selectedMesa, product_id: productId, qty: 1 }) }
+  catch (e) { toast('Falhou ao enviar: ' + e.message) }
+}
+
+// Diminui 1 (corrige engano) — some do caixa também
+window.decComandaItem = async (idx) => {
+  const items = ensureDraft(selectedMesa)
+  const it = items[idx]
+  if (!it) return
+  const pid = it.product_id
+  it.qty -= 1
+  if (it.qty <= 0) items.splice(idx, 1)
+  saveLocalComandas()
+  renderComandaDetail()
+  if (navigator.vibrate) navigator.vibrate(20)
+  try { await sendCommand('comanda.addItem', { mesa: selectedMesa, product_id: pid, qty: -1 }) }
+  catch (e) { toast('Falhou: ' + e.message) }
 }
 
 // ---------- VENDA ----------

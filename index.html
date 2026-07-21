@@ -262,7 +262,7 @@ function renderProdutos() {
   app.innerHTML = `
     <div class="top"><img src="logo.png"><div><h1>Produtos</h1>
       <div class="upd">${(snap.products || []).length} cadastrados · edite e o caixa aplica em ~15s</div></div></div>
-    <div class="search"><input placeholder="🔍 Buscar produto…" value="${esc(pTerm)}" oninput="setPTerm(this.value)"></div>
+    <div class="search" style="display:flex;gap:6px;align-items:flex-start"><input style="flex:1" placeholder="🔍 Buscar produto…" value="${esc(pTerm)}" oninput="setPTerm(this.value)"><button type="button" onclick="scanProdutos()" title="Ler código de barras" style="width:52px;flex-shrink:0;background:var(--panel2);border:1px solid var(--border);border-radius:10px;color:var(--gold-l);font-size:22px;height:46px">📷</button></div>
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <button class="btn" style="margin:0;flex:1" onclick="openEdit('new')">+ Novo produto</button>
       ${editedIds.size ? `<button class="btn ghost" style="margin:0;width:auto;padding:0 14px" onclick="clearEdited()">Limpar ✓ (${editedIds.size})</button>` : ''}
@@ -333,9 +333,15 @@ window.openEdit = (id) => {
 }
 window.maskMoney = maskMoney
 
+// Busca por código de barras pela câmera — ação depende da aba atual
+function acharPorCodigo(code) { return (snap.products || []).find((p) => p.barcode && String(p.barcode) === String(code)) }
+window.scanProdutos = () => openScanner((code) => { const p = acharPorCodigo(code); if (p) openEdit(p.id); else toast('Nenhum produto com o código ' + code) })
+window.scanVenda = () => openScanner((code) => { const p = acharPorCodigo(code); if (p) { vInc(p.id); toast('+ ' + p.name) } else toast('Nenhum produto com o código ' + code) })
+window.scanComanda = () => openScanner((code) => { const p = acharPorCodigo(code); if (p) { addComandaItem(p.id); toast('+ ' + p.name) } else toast('Nenhum produto com o código ' + code) })
+
 // Leitor de código de barras pela câmera (ZXing). Preenche o campo #eBar.
 let scanReader = null
-window.openScanner = async () => {
+window.openScanner = async (onCode) => {
   if (typeof ZXing === 'undefined') { toast('Leitor não carregou — verifique a internet'); return }
   const ov = document.createElement('div')
   ov.id = 'scanOverlay'
@@ -353,10 +359,11 @@ window.openScanner = async () => {
       if (!result) return
       const code = (result.text || (result.getText && result.getText()) || '').replace(/\D/g, '')
       if (code.length >= 6) {
-        const inp = document.getElementById('eBar')
-        if (inp) inp.value = code
         if (navigator.vibrate) navigator.vibrate(120)
         closeScanner()
+        if (onCode) { onCode(code); return }
+        const inp = document.getElementById('eBar')
+        if (inp) inp.value = code
         toast('Código lido: ' + code)
       }
     })
@@ -491,7 +498,7 @@ function renderComandaDetail() {
       <div><h1>Mesa ${esc(selectedMesa)}</h1><div class="upd">${money(total)} · ${items.length} ${items.length === 1 ? 'item' : 'itens'}</div></div>
     </div>
     ${items.length ? '<section>' + items.map((i, idx) => `<div class="line"><span>${i.qty}x ${esc(i.name)}</span><span style="display:flex;align-items:center;gap:12px"><span class="gold">${money(i.qty * i.unit_price)}</span><button onclick="decComandaItem(${idx})" style="background:none;border:none;color:var(--danger);font-size:20px;line-height:1;padding:0 4px">−</button></span></div>`).join('') + '</section>' : '<p class="muted" style="text-align:center;margin:10px 0">Sem itens ainda — busque e toque num produto.</p>'}
-    <div class="search"><input placeholder="🔍 Adicionar produto…" value="${esc(cTerm)}" oninput="setCTerm(this.value)"></div>
+    <div class="search" style="display:flex;gap:6px;align-items:flex-start"><input style="flex:1" placeholder="🔍 Adicionar produto…" value="${esc(cTerm)}" oninput="setCTerm(this.value)"><button type="button" onclick="scanComanda()" title="Ler código de barras" style="width:52px;flex-shrink:0;background:var(--panel2);border:1px solid var(--border);border-radius:10px;color:var(--gold-l);font-size:22px;height:46px">📷</button></div>
     ${prods.map((p) => `
       <div class="prow" onclick="addComandaItem(${p.id})">
         <div class="nm">${esc(p.name)}<div class="sub">${money(p.price)} · ${p.stock} em estoque</div></div>
@@ -529,21 +536,47 @@ window.pickPag = (btn, m) => {
   const box = btn.closest('#fpag'); box.querySelectorAll('button').forEach((b) => b.classList.remove('on'))
   btn.classList.add('on'); btn.closest('.sheet-bg').dataset.pag = m
 }
+// Espera o caixa processar o comando (confirma o fechamento de verdade)
+async function waitCommand(cmdId, tries = 24, delay = 2500) {
+  for (let i = 0; i < tries; i++) {
+    await new Promise((r) => setTimeout(r, delay))
+    try {
+      const rows = await rpc('gharib_command_status', { p_token: TOKEN, p_cmd: cmdId })
+      const st = rows && rows[0]
+      if (st && st.status === 'done') return { ok: true }
+      if (st && st.status === 'error') return { ok: false, error: st.result }
+    } catch (e) {}
+  }
+  return { ok: false, pending: true }
+}
+
 window.confirmarFinalizar = async (mesa, btn) => {
   const pag = btn.closest('.sheet-bg').dataset.pag || 'Dinheiro'
+  const key = String(mesa)
+  const savedDraft = localComandas[key] // guarda pra restaurar se falhar
   btn.disabled = true; btn.textContent = 'Enviando…'
+  let cmdId
   try {
-    await sendCommand('comanda.close', { mesa, payment_method: pag })
-    closingMesas.add(String(mesa))
-    delete localComandas[String(mesa)]
-    saveLocalComandas()
-    document.querySelector('.sheet-bg').remove()
-    selectedMesa = null
-    toast('✓ Comanda fechada — registrada no caixa (' + pag + ')')
-    renderComandas()
+    cmdId = await sendCommand('comanda.close', { mesa, payment_method: pag })
   } catch (e) {
     btn.disabled = false; btn.textContent = 'Tentar de novo'
-    toast('Falhou: ' + e.message)
+    toast('Falhou: ' + e.message); return
+  }
+  // esconde otimista enquanto confirma
+  closingMesas.add(key); delete localComandas[key]; saveLocalComandas()
+  document.querySelector('.sheet-bg').remove()
+  selectedMesa = null; renderComandas()
+  toast('Fechando no caixa…')
+  const res = await waitCommand(cmdId)
+  if (res.ok) {
+    toast('✓ Comanda fechada no caixa (' + pag + ')')
+  } else {
+    // falhou/timeout: restaura a comanda pra não perder nada
+    closingMesas.delete(key); localComandas[key] = savedDraft; saveLocalComandas()
+    toast(res.pending
+      ? '⚠️ O caixa não confirmou. O PC precisa estar aberto e na versão mais recente.'
+      : '⚠️ ' + (res.error || 'falha ao fechar no caixa'))
+    if (view === 'comandas') renderComandas()
   }
 }
 
@@ -600,7 +633,7 @@ function renderVenda() {
   app.innerHTML = `
     <div class="top"><img src="logo.png"><div><h1>Venda rápida</h1>
       <div class="upd">registra direto no caixa (produtos por unidade)</div></div></div>
-    <div class="search"><input placeholder="🔍 Buscar produto…" value="${esc(vTerm)}" oninput="setVTerm(this.value)"></div>
+    <div class="search" style="display:flex;gap:6px;align-items:flex-start"><input style="flex:1" placeholder="🔍 Buscar produto…" value="${esc(vTerm)}" oninput="setVTerm(this.value)"><button type="button" onclick="scanVenda()" title="Ler código de barras" style="width:52px;flex-shrink:0;background:var(--panel2);border:1px solid var(--border);border-radius:10px;color:var(--gold-l);font-size:22px;height:46px">📷</button></div>
     <section style="padding:10px 14px"><label style="margin:0 0 6px">Forma de pagamento</label>
       <div class="paybtns">
         ${['Dinheiro', 'PIX', 'Débito', 'Crédito'].map((m) =>
